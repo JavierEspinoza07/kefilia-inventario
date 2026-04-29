@@ -44,6 +44,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
       <span>Finanzas</span>
     </button>
+    <button class="nav-btn" data-tab="pedidos" id="navPedidos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
+      <span>Pedidos</span>
+    </button>
   </nav>
 
   <div class="sidebar-footer">
@@ -316,6 +320,95 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         <p>Sin movimientos financieros</p>
         <span>Registra ingresos y gastos para empezar</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──── PEDIDOS TAB ──── -->
+  <section class="tab-panel" id="tabPedidos">
+    <div class="page-header">
+      <h1 class="page-title">Pedidos</h1>
+      <p class="page-subtitle">Gestión de pedidos pendientes y completados</p>
+    </div>
+
+    <!-- Nuevo Pedido -->
+    <div class="panel form-panel">
+      <div class="panel-header">
+        <h2>Nuevo Pedido</h2>
+        <span class="tag-ingreso" style="background:var(--orange-bg);color:var(--orange)">+</span>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="pedidoCliente">Cliente</label>
+          <input id="pedidoCliente" type="text" class="form-control" placeholder="Nombre del cliente">
+        </div>
+        <div class="form-group">
+          <label for="pedidoSabor">Sabor</label>
+          <select id="pedidoSabor" class="form-control" onchange="actualizarPrecioPedido()">
+            <option value="Natural">Natural</option>
+            <option value="Strawkefir">Strawkefir (Frutilla)</option>
+            <option value="Chocokefir">Chocokefir (Chocolate)</option>
+            <option value="Kefipecha">Kefipecha (Durazno)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="pedidoTipo">Tipo</label>
+          <select id="pedidoTipo" class="form-control" onchange="actualizarPrecioPedido()">
+            <option value="Kefir">Kefir Normal</option>
+            <option value="Griego">Griego</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="pedidoTipoVenta">Tipo de Venta</label>
+          <select id="pedidoTipoVenta" class="form-control" onchange="actualizarPrecioPedido()">
+            <option value="frasco">Con frasco</option>
+            <option value="refill">Refill (sin frasco)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="pedidoCantidad">Cantidad</label>
+          <input id="pedidoCantidad" type="number" class="form-control" placeholder="Unidades" min="1" value="1" oninput="actualizarPrecioPedido()">
+        </div>
+        <div class="form-group">
+          <label for="pedidoEntrega">Fecha de Entrega</label>
+          <input id="pedidoEntrega" type="date" class="form-control">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label for="pedidoNotas">Notas / Observaciones</label>
+          <input id="pedidoNotas" type="text" class="form-control" placeholder="Ej: Sin azúcar, entregar en domicilio...">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <div class="order-price-display">
+            <span>Total estimado</span>
+            <strong id="pedidoPrecioTotal">Bs. 0.00</strong>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="registrarPedido()" id="btnPedido"
+        style="background:linear-gradient(135deg,#f97316,#ea580c);box-shadow:0 4px 20px rgba(249,115,22,0.3)">
+        Registrar Pedido
+      </button>
+    </div>
+
+    <!-- Filtro -->
+    <div class="filter-tabs" id="pedidoFilterTabs">
+      <button class="filter-tab active" data-filter="todos" onclick="filtrarPedidos('todos')">Todos</button>
+      <button class="filter-tab" data-filter="Pendiente" onclick="filtrarPedidos('Pendiente')">Pendientes</button>
+      <button class="filter-tab" data-filter="Completado" onclick="filtrarPedidos('Completado')">Completados</button>
+      <button class="filter-tab" data-filter="Cancelado" onclick="filtrarPedidos('Cancelado')">Cancelados</button>
+    </div>
+
+    <!-- Listado de pedidos -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Lista de Pedidos</h2>
+        <span class="badge" id="pedidosCount">0</span>
+      </div>
+      <div class="order-grid" id="orderGrid"></div>
+      <div class="empty-state" id="pedidosEmpty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+        <p>Sin pedidos registrados</p>
+        <span>Crea tu primer pedido arriba</span>
       </div>
     </div>
   </section>

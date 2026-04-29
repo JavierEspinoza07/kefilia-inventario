@@ -8,6 +8,8 @@ let saldo = Number(localStorage.getItem("kef_saldo")) || 0;
 let inventario = JSON.parse(localStorage.getItem("kef_inventario")) || {};
 let stockLog = JSON.parse(localStorage.getItem("kef_stockLog")) || [];
 let lotes = JSON.parse(localStorage.getItem("kef_lotes")) || [];
+let pedidos = JSON.parse(localStorage.getItem("kef_pedidos")) || [];
+let pedidoFiltro = "todos";
 
 // Only 1L products — 4 sabores x 2 tipos = 8 productos
 const SABORES = ["Natural","Strawkefir","Chocokefir","Kefipecha"];
@@ -49,6 +51,7 @@ const tabs = {
   inventario: document.getElementById("tabInventario"),
   produccion: document.getElementById("tabProduccion"),
   finanzas: document.getElementById("tabFinanzas"),
+  pedidos: document.getElementById("tabPedidos"),
 };
 
 document.querySelectorAll(".nav-btn[data-tab]").forEach(btn => {
@@ -272,6 +275,7 @@ function renderAll(){
   renderFinanzas();
   renderInventario();
   renderProduccion();
+  renderPedidos();
 }
 
 function renderDashboard(){
@@ -531,4 +535,179 @@ function exportarExcel(){
 
 // ─── INIT ───
 actualizarPrecioIngreso();
+actualizarPrecioPedido();
 renderAll();
+
+// ═══════ PEDIDOS ═══════
+
+function actualizarPrecioPedido(){
+  const sabor = document.getElementById("pedidoSabor").value;
+  const tipo  = document.getElementById("pedidoTipo").value;
+  const tv    = document.getElementById("pedidoTipoVenta").value;
+  const cant  = Math.max(1, Number(document.getElementById("pedidoCantidad").value) || 1);
+  const precios = PRECIOS[sabor + "-" + tipo];
+  const total = precios ? precios[tv] * cant : 0;
+  document.getElementById("pedidoPrecioTotal").textContent = fmt(total);
+}
+
+function registrarPedido(){
+  const cliente  = document.getElementById("pedidoCliente").value.trim();
+  const sabor    = document.getElementById("pedidoSabor").value;
+  const tipo     = document.getElementById("pedidoTipo").value;
+  const tv       = document.getElementById("pedidoTipoVenta").value;
+  const cant     = Math.max(1, Number(document.getElementById("pedidoCantidad").value) || 1);
+  const entrega  = document.getElementById("pedidoEntrega").value;
+  const notas    = document.getElementById("pedidoNotas").value.trim();
+
+  if(!cliente) return showToast("Escribe el nombre del cliente", "error");
+
+  const precios = PRECIOS[sabor + "-" + tipo];
+  const unitPrice = precios ? precios[tv] : 0;
+  const total = unitPrice * cant;
+
+  const pName = prodName(sabor, tipo);
+  const tvLabel = tv === "refill" ? "Refill" : "Con frasco";
+  const pedidoId = "PED-" + Date.now().toString(36).toUpperCase();
+
+  pedidos.push({
+    id: Date.now(),
+    pedidoId,
+    cliente,
+    sabor, tipo, tv, tvLabel,
+    cant,
+    producto: pName,
+    unitPrice, total,
+    entrega,
+    notas,
+    estado: "Pendiente",
+    timestamp: Date.now(),
+    completadoAt: null
+  });
+
+  guardarPedidos();
+
+  // Reset form
+  document.getElementById("pedidoCliente").value = "";
+  document.getElementById("pedidoCantidad").value = 1;
+  document.getElementById("pedidoEntrega").value = "";
+  document.getElementById("pedidoNotas").value = "";
+  actualizarPrecioPedido();
+  renderAll();
+  showToast(`Pedido ${pedidoId} registrado para ${cliente}`);
+}
+
+function completarPedido(id){
+  const p = pedidos.find(o => o.id === id);
+  if(!p || p.estado !== "Pendiente") return;
+
+  // Descontar inventario y registrar venta en finanzas
+  const stockActual = inventario[p.producto] || 0;
+  if(stockActual < p.cant){
+    if(!confirm(`Stock insuficiente de ${p.producto} (tienes ${stockActual} uds). \u00bfRegistrar el pedido igual sin descontar stock?`)) return;
+  } else {
+    inventario[p.producto] -= p.cant;
+    stockLog.push({ id:Date.now(), timestamp:Date.now(), producto:p.producto, cantidad:p.cant, tipo:"salida (pedido)", lote:p.pedidoId });
+    guardarStock();
+  }
+
+  // Registrar como ingreso en finanzas
+  const timestamp = Date.now();
+  saldo += p.total;
+  movimientos.push({ id:timestamp, timestamp, tipo:"INGRESO", cat:"Venta (Pedido)",
+    desc: `${p.cant}x ${p.producto} (${p.tvLabel}) — Pedido ${p.pedidoId}`,
+    ingreso: p.total, gasto: 0, saldo });
+  guardar();
+
+  p.estado = "Completado";
+  p.completadoAt = Date.now();
+  guardarPedidos();
+  renderAll();
+  showToast(`Pedido ${p.pedidoId} completado — ${fmt(p.total)} registrado`);
+}
+
+function cancelarPedido(id){
+  const p = pedidos.find(o => o.id === id);
+  if(!p) return;
+  if(!confirm(`¿Cancelar el pedido ${p.pedidoId} de ${p.cliente}?`)) return;
+  p.estado = "Cancelado";
+  guardarPedidos();
+  renderAll();
+  showToast("Pedido cancelado", "error");
+}
+
+function eliminarPedido(id){
+  if(!confirm("\u00bfEliminar este pedido definitivamente?")) return;
+  pedidos = pedidos.filter(o => o.id !== id);
+  guardarPedidos();
+  renderAll();
+  showToast("Pedido eliminado");
+}
+
+function filtrarPedidos(filtro){
+  pedidoFiltro = filtro;
+  document.querySelectorAll(".filter-tab").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.filter === filtro);
+  });
+  renderPedidos();
+}
+
+function guardarPedidos(){
+  localStorage.setItem("kef_pedidos", JSON.stringify(pedidos));
+}
+
+function renderPedidos(){
+  const grid  = document.getElementById("orderGrid");
+  const empty = document.getElementById("pedidosEmpty");
+  const count = document.getElementById("pedidosCount");
+
+  const lista = pedidoFiltro === "todos"
+    ? pedidos
+    : pedidos.filter(p => p.estado === pedidoFiltro);
+
+  count.textContent = lista.length;
+  grid.innerHTML = "";
+
+  if(lista.length === 0){ empty.style.display = "block"; return; }
+  empty.style.display = "none";
+
+  lista.slice().reverse().forEach(p => {
+    const card = document.createElement("div");
+    card.className = "order-card";
+
+    const statusClass = p.estado === "Pendiente" ? "pendiente" : p.estado === "Completado" ? "completado" : "cancelado";
+    const entregaStr = p.entrega ? new Date(p.entrega + "T12:00").toLocaleDateString("es-BO",{day:"2-digit",month:"short",year:"numeric"}) : "Sin fecha";
+    const creadoStr  = new Date(p.timestamp).toLocaleDateString("es-BO",{day:"2-digit",month:"short",year:"numeric"});
+
+    const dotClass = p.estado === "Pendiente" ? "dot-orange" : p.estado === "Completado" ? "dot-green" : "dot-red";
+
+    const accionesHTML = p.estado === "Pendiente"
+      ? `<button class="order-btn complete" onclick="completarPedido(${p.id})">Completar</button>
+         <button class="order-btn cancel" onclick="cancelarPedido(${p.id})">Cancelar</button>
+         <button class="order-btn del" onclick="eliminarPedido(${p.id})">✕</button>`
+      : `<button class="order-btn del" onclick="eliminarPedido(${p.id})">Eliminar</button>`;
+
+    card.innerHTML = `
+      <div class="order-header">
+        <div>
+          <div class="order-id">${p.pedidoId}</div>
+          <div class="order-client">${p.cliente}</div>
+        </div>
+        <span class="order-status ${statusClass}">${p.estado}</span>
+      </div>
+      <div class="order-product">${p.producto}</div>
+      <div class="order-details">
+        <span class="order-detail-item">${p.tvLabel}</span>
+        <span class="order-detail-item">${p.cant} ud${p.cant > 1 ? "s" : ""}</span>
+        <span class="order-detail-item">Bs. ${p.unitPrice} c/u</span>
+      </div>
+      <div class="order-price-row">
+        <span class="order-price-label">Total</span>
+        <span class="order-price">${fmt(p.total)}</span>
+      </div>
+      ${p.notas ? `<div class="order-notes">${p.notas}</div>` : ""}
+      <div class="order-date">Creado: ${creadoStr} &nbsp;&bull;&nbsp; Entrega: ${entregaStr}</div>
+      <div class="order-actions">${accionesHTML}</div>`;
+
+    grid.appendChild(card);
+  });
+}
