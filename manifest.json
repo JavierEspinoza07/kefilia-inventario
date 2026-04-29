@@ -1,0 +1,8 @@
+{
+  "name": "Kefilia Gestión",
+  "short_name": "Kefilia",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#080b10",
+  "theme_color": "#22c55e"
+}
